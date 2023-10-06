@@ -3,6 +3,7 @@
 # This program is free software; you can redistribute it and/or modify it under the terms of GPLv2
 
 import os
+import re
 from enum import Enum
 from glob import glob
 
@@ -18,6 +19,8 @@ DYNAMIC_OPTIONS = {'regex', 'field', 'match', 'action', 'extra_data', 'hostname'
                    'extra_data', 'srcgeoip', 'dstgeoip'}
 RULE_FIELDS = ['description', 'details', 'filename', 'gdpr', 'groups', 'id', 'level', 'relative_dirname', 'pci_dss',
                'status', 'gpg13', 'hipaa', 'nist_800_53', 'tsc', 'mitre']
+RULE_FILES_FIELDS = ['filename', 'relative_dirname', 'status']
+RULE_FILES_REQUIRED_FIELDS = ['filename']
 
 
 class Status(Enum):
@@ -88,15 +91,18 @@ def set_groups(groups: list, general_groups: list, rule: dict):
         Rule to be updated.
     """
     groups.extend(general_groups)
-    for g in groups:
+    for group in groups:
+        # These characters are the ones Core replaces when reading XML tags
+        group = group.strip()
+        group = re.sub('[\n\r]+', '', group)
         for req in RULE_REQUIREMENTS:
-            if g.startswith(req):
+            if group.startswith(req):
                 # We add the requirement to the rule
-                rule[req].append(g[len(req) + 1:]) if g[len(req) + 1:] not in rule[req] else None
+                rule[req].append(group[len(req) + 1:]) if group[len(req) + 1:] not in rule[req] else None
                 break
         else:
             # If a requirement is not found we add it to the rule as group
-            rule['groups'].append(g) if g != '' else None
+            rule['groups'].append(group) if group != '' else None
 
 
 def load_rules_from_file(rule_filename: str, rule_relative_path: str, rule_status: str) -> list:

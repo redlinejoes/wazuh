@@ -36,7 +36,7 @@ def test_get_script_arguments(mock_ArgumentParser):
         call('-a', '--agents', nargs='+', help='Agent IDs to upgrade.'),
         call('-r', '--repository', type=str, help='Specify a repository URL. [Default: packages.wazuh.com/4.x/wpk/]'),
         call('-v', '--version', type=str, help='Version to upgrade. [Default: latest Wazuh version]'),
-        call('-F', '--force', action='store_true', help='Allows reinstall same version and downgrade version.'),
+        call('-F', '--force', action='store_true', help='Forces the agents to upgrade, ignoring version validations.'),
         call('-s', '--silent', action='store_true', help='Do not show output.'),
         call('-l', '--list_outdated', action='store_true', help='Generates a list with all outdated agents.'),
         call('-f', '--file', type=str, help='Custom WPK filename.'),
@@ -87,6 +87,21 @@ async def test_get_agents_versions():
             as forward_mock:
         result = await agent_upgrade.get_agents_versions(agents_list)
         assert all(result[agent] == {'prev_version': mocked_version, 'new_version': None} for agent in agents_list)
+
+
+@pytest.mark.asyncio
+async def test_get_agent_version():
+    class AffectedItems:
+        def __init__(self, affected_items):
+            self.affected_items = affected_items
+
+    agent_id = "001"
+    mocked_version = "v4.6.0"
+    affected_items = [{"id": agent_id, "version": mocked_version}]
+
+    with patch('scripts.agent_upgrade.cluster_utils.forward_function', return_value=AffectedItems(affected_items)):
+        result = await agent_upgrade.get_agent_version(agent_id)
+        assert result == mocked_version
 
 
 def test_create_command():

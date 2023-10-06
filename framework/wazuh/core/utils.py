@@ -112,7 +112,7 @@ def process_array(array: list, search_text: str = None, complementary_search: bo
                   search_in_fields: list = None, select: list = None, sort_by: list = None,
                   sort_ascending: bool = True, allowed_sort_fields: list = None, offset: int = 0, limit: int = None,
                   q: str = '', required_fields: list = None, allowed_select_fields: list = None,
-                  filters: dict = None) -> dict:
+                  filters: dict = None, distinct: bool = False) -> dict:
     """Process a Wazuh framework data array.
 
     Parameters
@@ -145,6 +145,8 @@ def process_array(array: list, search_text: str = None, complementary_search: bo
         List of fields allowed to select from.
     filters : dict
         Defines required field filters. Format: {"field1":"value1", "field2":["value2","value3"]}
+    distinct : bool
+        Look for distinct values.
 
     Returns
     -------
@@ -152,14 +154,15 @@ def process_array(array: list, search_text: str = None, complementary_search: bo
         Dictionary: {'items': Processed array, 'totalItems': Number of items, before applying offset and limit)}
     """
     if not array:
-        return {'items': list(), 'totalItems': 0}
-
+        return {'items': [], 'totalItems': 0}
+    
     if isinstance(filters, dict) and len(filters.keys()) > 0:
-        new_array = list()
+        new_array = []
         for element in array:
             for key, value in filters.items():
                 if element[key] in value:
                     new_array.append(element)
+                    break
 
         array = new_array
 
@@ -177,8 +180,18 @@ def process_array(array: list, search_text: str = None, complementary_search: bo
         array = filter_array_by_query(q, array)
 
     if select:
+        # Do not force the inclusion of any fields when we are looking for distinct values
+        required_fields = set() if distinct else required_fields
         array = select_array(array, select=select, required_fields=required_fields,
                              allowed_select_fields=allowed_select_fields)
+
+    if distinct:
+        distinct_array = []
+        for element in array:
+            if element not in distinct_array:
+                distinct_array.append(element)
+
+        array = distinct_array
 
     return {'items': cut_array(array, offset=offset, limit=limit), 'totalItems': len(array)}
 
@@ -927,6 +940,34 @@ def check_wazuh_limits_unchanged(new_conf, original_conf):
             raise WazuhError(1127, extra_message=f"global > limits > {disabled_limit}")
 
 
+def check_agents_allow_higher_versions(data: str):
+    """Check if higher version agents are allowed.
+
+    Parameters
+    ----------
+    data : str
+        Configuration file content.
+    """
+    blocked_configurations = configuration.api_conf['upload_configuration']
+
+    def check_section(agents_regex, split_section):
+        try:
+            for line in agents_regex.findall(data)[0].split(split_section):
+                tag_matches = re.match(r".*<allow_higher_versions>(.*)</allow_higher_versions>.*",
+                                            line, flags=re.MULTILINE | re.DOTALL)
+                if tag_matches and (tag_matches.group(1) == 'yes'):
+                    raise WazuhError(1129)
+        except IndexError:
+            pass
+
+    if not blocked_configurations['agents']['allow_higher_versions']['allow']:
+        remote_section = re.compile(r"<remote>(.*)</remote>", flags=re.MULTILINE | re.DOTALL)
+        check_section(remote_section, split_section='</remote>')
+
+        auth_section = re.compile(r"<auth>(.*)</auth>", flags=re.MULTILINE | re.DOTALL)
+        check_section(auth_section, split_section='</auth>')
+
+
 def load_wazuh_xml(xml_path, data=None):
     if not data:
         with open(xml_path) as f:
@@ -1200,7 +1241,7 @@ def filter_array_by_query(q: str, input_array: typing.List) -> typing.List:
 
     # compile regular expression only one time when function is called
     # get elements in a clause
-    re_get_elements = re.compile(r'([\w\-]+)(?:\.?)((?:[\w\-](?:\.[\w\-])*)*)(=|!=|<|>|~)([\w\-./: ]+)')
+    re_get_elements = re.compile(r'([\w\-]+)(?:\.?)((?:[\w\-](?:\.[\w\-])*)*)(=|!=|<|>|~)([\w\-./: @]+)')
     # get a list with OR clauses
     or_clauses = q.split(',')
     output_array = []
@@ -1382,7 +1423,8 @@ class WazuhDBQuery(object):
         self.count = count
         self.data = get_data
         self.total_items = 0
-        self.min_select_fields = min_select_fields
+        # Do not include any fields when we are looking for distinct values
+        self.min_select_fields = set() if distinct else min_select_fields
         self.query_operators = {"=": "=", "!=": "!=", "<": "<", ">": ">", "~": 'LIKE'}
         self.query_separators = {',': 'OR', ';': 'AND', '': ''}
         self.special_characters = "\'\""
@@ -1393,22 +1435,21 @@ class WazuhDBQuery(object):
         #    id   > 5      ),
         #    group=webserver
         self.query_regex = re.compile(
-            # A ( character.
-            r"(\()?" +
+            # One or more ( characters.
+            r"(\(+)?" +
             # Field name: name of the field to look on DB.
             r"([\w.]+)" +
             # Operator: looks for '=', '!=', '<', '>' or '~'.
             rf"([{''.join(self.query_operators.keys())}]{{1,2}})" +
             # Value: A string.
-            r"((?:(?:\((?:\[[\[\]\w _\-.,:?\\/'\"=@%<>{}]*]|[\[\]\w _\-.:?\\/'\"=@%<>{}]*)\))*"
-            r"(?:\[[\[\]\w _\-.,:?\\/'\"=@%<>{}]*]|[\[\]\w _\-.:?\\/'\"=@%<>{}]+)"
-            r"(?:\((?:\[[\[\]\w _\-.,:?\\/'\"=@%<>{}]*]|[\[\]\w _\-.:?\\/'\"=@%<>{}]*)\))*)+)" +
-            # A ) character.
-            r"(\))?" +
+            r"((?:(?:\((?:\[[\[\]\w _\-.,:?\\/'\"=@%<>{}]*]|[\[\]\w _\-.:?\\/'\"=@%<>{}$]*)\))*"
+            r"(?:\[[\[\]\w _\-.,:?\\/'\"=@%<>{}]*]|[\[\]\w _\-.:?\\/'\"=@%<>{}$]+)"
+            r"(?:\((?:\[[\[\]\w _\-.,:?\\/'\"=@%<>{}]*]|[\[\]\w _\-.:?\\/'\"=@%<>{}$]*)\))*)+)"
+            # One or more ) characters.
+            r"(\)+)?" +
             # Separator: looks for ';', ',' or nothing.
             rf"([{''.join(self.query_separators.keys())}])?"
         )
-        self.date_regex = re.compile(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}")
         self.date_fields = date_fields
         self.extra_fields = extra_fields
         self.q = query
@@ -1519,11 +1560,11 @@ class WazuhDBQuery(object):
                                                                                  operator))
 
             if open_level:
-                level += 1
+                level += len(open_level)
             if close_level:
-                level -= 1
+                level -= len(close_level)
 
-            if not self._pass_filter(value):
+            if not self._pass_filter(field, value):
                 op_index = len(list(filter(lambda x: field in x['field'], self.query_filters)))
                 self.query_filters.append({'value': None if value == "null" else value,
                                            'operator': self.query_operators[operator],
@@ -1553,7 +1594,7 @@ class WazuhDBQuery(object):
                                 'separator': 'AND' if len(value) <= 1 or len(value) == i + 1 else 'OR',
                                 'level': 0 if i == len(value) - 1 else 1}
                                for name, value in legacy_filters_as_list.items()
-                               for i, subvalue in enumerate(value) if not self._pass_filter(subvalue)]
+                               for i, subvalue in enumerate(value) if not self._pass_filter(name, subvalue)]
 
         if self.query_filters:
             # if only traditional filters have been defined, remove last AND from the query.
@@ -1591,18 +1632,30 @@ class WazuhDBQuery(object):
 
     def _add_filters_to_query(self):
         self._parse_filters()
+
         curr_level = 0
         for q_filter in self.query_filters:
             self._clean_filter(q_filter)
             field_name = q_filter['field'].split('$', 1)[0]
             field_filter = q_filter['field'].replace('.', '_')
+            level = q_filter['level']
 
-            self.query += '((' if curr_level < q_filter['level'] else '('
+            repeat_open = level + 1 - curr_level
+            if level == 0 or repeat_open == 0:
+                repeat_open = 1
+
+            self.query += '(' * repeat_open
 
             self._process_filter(field_name, field_filter, q_filter)
 
-            self.query += ('))' if curr_level > q_filter['level'] else ')') + ' {} '.format(q_filter['separator'])
-            curr_level = q_filter['level']
+            repeat_close = 1
+            if curr_level > level:
+                repeat_close += curr_level - level
+            
+            self.query += ')' * repeat_close
+            self.query += ' {} '.format(q_filter['separator'])
+            curr_level = level
+
         if self.distinct:
             self.query += ' WHERE ' if not self.q and 'WHERE' not in self.query else ' AND '
             self.query += ' AND '.join(
@@ -1761,8 +1814,9 @@ class WazuhDBQuery(object):
         return "SELECT COUNT(*) FROM ({0})"
 
     @staticmethod
-    def _pass_filter(db_filter):
-        return db_filter == "all"
+    def _pass_filter(field, value):
+        # field is used by child classes containing a field that may have a value equal to 'all'
+        return value == "all"
 
 
 class WazuhDBQueryDistinct(WazuhDBQuery):
@@ -1939,6 +1993,7 @@ def validate_wazuh_xml(content: str, config_file: bool = False):
             with open(common.OSSEC_CONF, 'r') as f:
                 current_xml = f.read()
             check_wazuh_limits_unchanged(final_xml, current_xml)
+            check_agents_allow_higher_versions(final_xml)
         # Check xml format
         load_wazuh_xml(xml_path='', data=final_xml)
     except ExpatError:
@@ -1967,6 +2022,8 @@ def upload_file(content: str, file_path: str, check_xml_formula_values: bool = T
         Error reading file.
     WazuhInternalError(1016)
         Error moving file.
+    WazuhError(1006)
+        Permision error accessing File or Directory.
 
     Returns
     -------
@@ -2001,15 +2058,17 @@ def upload_file(content: str, file_path: str, check_xml_formula_values: bool = T
             final_file = escape_formula_values(content) if check_xml_formula_values else content
             tmp_file.write(final_file)
         chmod(tmp_file_path, 0o660)
-    except IOError:
-        raise WazuhInternalError(1005)
+    except IOError as exc:
+        raise WazuhInternalError(1005) from exc
 
     # Move temporary file to group folder
     try:
         new_conf_path = path.join(common.WAZUH_PATH, file_path)
         safe_move(tmp_file_path, new_conf_path, ownership=(common.wazuh_uid(), common.wazuh_gid()), permissions=0o660)
-    except Error:
-        raise WazuhInternalError(1016)
+    except PermissionError as exc:
+        raise WazuhError(1006) from exc
+    except Error as exc:
+        raise WazuhInternalError(1016) from exc
 
     return results.WazuhResult({'message': 'File was successfully updated'})
 

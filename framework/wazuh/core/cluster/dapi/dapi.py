@@ -35,7 +35,7 @@ from wazuh.core.wazuh_socket import wazuh_sendsync
 pools = common.mp_pools.get()
 
 authentication_funcs = {'check_token', 'check_user_master', 'get_permissions', 'get_security_conf'}
-
+events_funcs = {"send_event_to_analysisd"}
 
 class DistributedAPI:
     """Represents a distributed API request."""
@@ -283,6 +283,8 @@ class DistributedAPI:
                         pool = pools.get('thread_pool')
                     elif self.f.__name__ in authentication_funcs:
                         pool = pools.get('authentication_pool')
+                    elif self.f.__name__ in events_funcs:
+                        pool = pools.get('events_pool')
                     else:
                         pool = pools.get('process_pool')
 
@@ -294,8 +296,8 @@ class DistributedAPI:
                     data = await asyncio.wait_for(task, timeout=timeout)
                 except asyncio.TimeoutError:
                     raise exception.WazuhInternalError(3021)
-                except OperationalError:
-                    raise exception.WazuhInternalError(2008)
+                except OperationalError as exc:
+                    raise exception.WazuhInternalError(2008, extra_message=str(exc.orig))
                 except process.BrokenProcessPool:
                     raise exception.WazuhInternalError(901)
             except json.decoder.JSONDecodeError:

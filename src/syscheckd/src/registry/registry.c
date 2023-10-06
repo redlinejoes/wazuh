@@ -178,7 +178,7 @@ static void registry_key_transaction_callback(ReturnTypeCallback resultType,
                                             old_attributes);
 
         if (cJSON_GetArraySize(changed_attributes) == 0) {
-            mwarn(FIM_EMPTY_CHANGED_ATTRIBUTES, path);
+            mdebug2(FIM_EMPTY_CHANGED_ATTRIBUTES, path);
             goto end;
         }
     }
@@ -322,7 +322,7 @@ static void registry_value_transaction_callback(ReturnTypeCallback resultType,
                                               old_attributes);
 
         if (cJSON_GetArraySize(changed_attributes) == 0) {
-            mwarn(FIM_EMPTY_CHANGED_ATTRIBUTES, path);
+            mdebug2(FIM_EMPTY_CHANGED_ATTRIBUTES, path);
             goto end;
         }
     }
@@ -887,12 +887,12 @@ void fim_read_values(HKEY key_handle,
         if (fim_registry_validate_ignore(value_path, configuration, 0)) {
             os_free(value_path);
             os_free(value_data.name);
-            return;
+            continue;
         }
         os_free(value_path);
 
         if (fim_check_restrict(new.registry_entry.value->name, configuration->restrict_value)) {
-            return;
+            continue;
         }
 
         arch_string = (arch == ARCH_32BIT) ? "[x32]" : "[x64]";
@@ -921,6 +921,7 @@ void fim_read_values(HKEY key_handle,
         }
     }
 
+    new.registry_entry.value = NULL;
     os_free(value_data.name);
     os_free(data_buffer);
 }
@@ -978,6 +979,7 @@ void fim_open_key(HKEY root_key_handle,
     if (fim_registry_validate_recursion_level(full_key, configuration)) {
         return;
     }
+
     // Ignore restriction
     if (fim_registry_validate_ignore(full_key, configuration, 1)) {
         return;
@@ -1026,6 +1028,12 @@ void fim_open_key(HKEY root_key_handle,
 
         os_free(new_full_key);
     }
+
+    // Restrict check
+    if (fim_check_restrict(full_key, configuration->restrict_key)) {
+        return;
+    }
+
     // Done scanning sub_keys, trigger an alert on the current key if required.
     new.type = FIM_TYPE_REGISTRY;
     new.registry_entry.key = fim_registry_get_key_data(current_key_handle, full_key, configuration);

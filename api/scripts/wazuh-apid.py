@@ -10,18 +10,17 @@ import signal
 import sys
 
 from api.constants import API_LOG_PATH
+from wazuh.core.wlogging import TimeBasedFileRotatingHandler, SizeBasedFileRotatingHandler
 from wazuh.core import pyDaemonModule
 
 API_MAIN_PROCESS = 'wazuh-apid'
 API_LOCAL_REQUEST_PROCESS = 'wazuh-apid_exec'
 API_AUTHENTICATION_PROCESS = 'wazuh-apid_auth'
+API_SECURITY_EVENTS_PROCESS = 'wazuh-apid_events'
 
 
 def spawn_process_pool():
-    """Import necessary basic Wazuh SDK modules for the local request pool and spawn child."""
-    from wazuh import agent, manager  # noqa
-    from wazuh.core import common  # noqa
-    from wazuh.core.cluster import dapi  # noqa
+    """Spawn general process pool child."""
 
     exec_pid = os.getpid()
     pyDaemonModule.create_pid(API_LOCAL_REQUEST_PROCESS, exec_pid)
@@ -29,9 +28,17 @@ def spawn_process_pool():
     signal.signal(signal.SIGINT, signal.SIG_IGN)
 
 
+def spawn_events_pool():
+    """Spawn events process pool child."""
+
+    events_pid = os.getpid()
+    pyDaemonModule.create_pid(API_SECURITY_EVENTS_PROCESS, events_pid)
+
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
+
+
 def spawn_authentication_pool():
-    """Import necessary basic Wazuh security modules for the authentication tasks pool and spawn child."""
-    from wazuh import security  # noqa
+    """Spawn authentication process pool child."""
 
     auth_pid = os.getpid()
     pyDaemonModule.create_pid(API_AUTHENTICATION_PROCESS, auth_pid)
@@ -190,15 +197,29 @@ if __name__ == '__main__':
 
 
     def set_logging(log_path=f'{API_LOG_PATH}.log', foreground_mode=False, debug_mode='info'):
+        """Set up logging for the API.
+        
+        Parameters
+        ----------
+        log_path : str
+            Path of the log file.
+        foreground_mode : bool
+            If True, the log will be printed to stdout.
+        debug_mode : str
+            Debug level. Possible values: disabled, info, warning, error, debug, debug2.
+        """
+        if not api_conf['logs']['max_size']['enabled']:
+            custom_handler = TimeBasedFileRotatingHandler(filename=log_path, when='midnight')
+        else:
+            max_size = APILoggerSize(api_conf['logs']['max_size']['size']).size
+            custom_handler = SizeBasedFileRotatingHandler(filename=log_path, maxBytes=max_size, backupCount=1)
+
         for logger_name in ('connexion.aiohttp_app', 'connexion.apis.aiohttp_api', 'wazuh-api'):
             api_logger = alogging.APILogger(
                 log_path=log_path, foreground_mode=foreground_mode, logger_name=logger_name,
-                debug_level='info' if logger_name != 'wazuh-api' and debug_mode != 'debug2' else debug_mode,
-                max_size=APILoggerSize(api_conf['logs']['max_size']['size']).size
-                if api_conf['logs']['max_size']['enabled'] else 0
+                debug_level='info' if logger_name != 'wazuh-api' and debug_mode != 'debug2' else debug_mode
             )
-
-            api_logger.setup_logger()
+            api_logger.setup_logger(custom_handler)
         if os.path.exists(log_path):
             os.chown(log_path, common.wazuh_uid(), common.wazuh_gid())
             os.chmod(log_path, 0o660)
@@ -219,6 +240,7 @@ if __name__ == '__main__':
     try:
         plain_log = 'plain' in api_conf['logs']['format']
         json_log = 'json' in api_conf['logs']['format']
+
         if plain_log:
             set_logging(log_path=f'{API_LOG_PATH}.log', debug_mode=api_conf['logs']['level'],
                         foreground_mode=args.foreground)

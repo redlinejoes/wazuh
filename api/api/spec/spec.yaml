@@ -40,12 +40,12 @@ info:
 
     <SecurityDefinitions />
 
-  version: '4.6.0'
-  x-revision: '40600'
+  version: '4.8.0'
+  x-revision: '40800'
   title: 'Wazuh API REST'
   license:
     name: 'GPL 2.0'
-    url: 'https://github.com/wazuh/wazuh/blob/v4.5.0/LICENSE'
+    url: 'https://github.com/wazuh/wazuh/blob/v4.8.0/LICENSE'
 
 servers:
   - url: '{protocol}://{host}:{port}'
@@ -538,6 +538,14 @@ x-rbac-catalog:
         actions: [ 'vulnerability:run' ]
         resources: [ '*:*:*' ]
         effect: "allow"
+    'event:ingest':
+      description: "Ingest events"
+      resources:
+        - $ref: '#/x-rbac-catalog/resources/*:*'
+      example:
+        actions: ['event:ingest']
+        resources: ['*:*:*']
+        effect: "allow"
 
 components:
   responses:
@@ -564,7 +572,7 @@ components:
             detail: "Permission denied: Resource type: *:*"
             remediation: "Please, make sure you have permissions to execute the current request. For more information
             on how to set up permissions, please visit
-            https://documentation.wazuh.com/4.4/user-manual/api/rbac/configuration.html"
+            https://documentation.wazuh.com/4.8/user-manual/api/rbac/configuration.html"
             error: 4000
             dapi_errors:
               unknown-node:
@@ -631,7 +639,7 @@ components:
             title: "Wazuh Error"
             detail: "Maximum number of requests per minute reached"
             remediation: "This limit can be changed in api.yaml file. More information here:
-            https://documentation.wazuh.com/4.4/user-manual/api/security/configuration.html"
+            https://documentation.wazuh.com/4.8/user-manual/api/security/configuration.html"
             code: 6001
 
     ResourceNotFoundResponse:
@@ -644,7 +652,7 @@ components:
             title: "Resource Not Found"
             detail: "The group does not exist"
             remediation: "Please, use `GET /groups` to find all available groups:
-            https://documentation.wazuh.com/4.4/user-manual/api/rbac/configuration.html"
+            https://documentation.wazuh.com/4.8/user-manual/api/rbac/configuration.html"
             code: 1710
             dapi_errors:
               unknown-node:
@@ -1368,10 +1376,6 @@ components:
           instead of a command name"
           type: string
           format: active_response_command
-        custom:
-          description: "Whether the specified command is a custom command or not"
-          type: boolean
-          default: false
         alert:
           type: object
           properties:
@@ -1445,10 +1449,6 @@ components:
 
     AgentGroup:
       type: object
-      required:
-      - count
-      - name
-      - configSum
       properties:
         count:
           type: integer
@@ -1842,6 +1842,10 @@ components:
                                     type: integer
                                     format: int32
                                     description: "Events coming from Office365 module (this agent)"
+                                  ms-graph:
+                                    type: integer
+                                    format: int32
+                                    description: "Events coming from ms-graph module (this agent)"
                                   oscap:
                                     type: integer
                                     format: int32
@@ -2469,10 +2473,18 @@ components:
                   type: integer
                   format: int32
                   description: "Available credits to process events in the current timeframe"
+                available_credits_prev:
+                  type: integer
+                  format: int32
+                  description: "Available credits to process events in the previous timeframe"
                 events_dropped:
                   type: integer
                   format: int32
                   description: "Events discarded because the EPS limit was reached and queues were full"
+                events_dropped_not_eps:
+                  type: integer
+                  format: int32
+                  description: "Events discarded due to causes unrelated to EPS limit"
                 seconds_over_limit:
                   type: integer
                   format: int32
@@ -2567,6 +2579,10 @@ components:
                               type: integer
                               format: int32
                               description: "Events coming from Office365 module"
+                            ms-graph:
+                              type: integer
+                              format: int32
+                              description: "Events coming from ms-graph module"
                             oscap:
                               type: integer
                               format: int32
@@ -2687,6 +2703,10 @@ components:
                               type: integer
                               format: int32
                               description: "Events discarded from Office365 module because the queue was full"
+                            ms-graph:
+                              type: integer
+                              format: int32
+                              description: "Events discarded from ms-graph module because the queue was full"
                             oscap:
                               type: integer
                               format: int32
@@ -3015,6 +3035,12 @@ components:
                                 fim_registry:
                                   type: integer
                                   format: int32
+                                fim_registry_key:
+                                  type: integer
+                                  format: int32
+                                fim_registry_value:
+                                  type: integer
+                                  format: int32
                                 syscheck:
                                   type: integer
                                   format: int32
@@ -3339,6 +3365,12 @@ components:
                                   type: integer
                                   format: int32
                                 fim_registry:
+                                  type: integer
+                                  format: int32
+                                fim_registry_key:
+                                  type: integer
+                                  format: int32
+                                fim_registry_value:
                                   type: integer
                                   format: int32
                                 syscheck:
@@ -3880,7 +3912,7 @@ components:
           type: number
           format: float
           description: "Same as `alerts_written` but focusing in [FTS alerts]
-          (https://documentation.wazuh.com/4.4/user-manual/ruleset/ruleset-xml-syntax/decoders.html?highlight=fts
+          (https://documentation.wazuh.com/4.8/user-manual/ruleset/ruleset-xml-syntax/decoders.html?highlight=fts
           #fts)"
         hostinfo_queue_size:
           type: number
@@ -5324,7 +5356,7 @@ components:
         </tr>
         <tr>
         <td>monitor</td>
-        <td>internal</td>
+        <td>reports</td>
         <td><code>&lt;reports&gt;</code></td>
         </tr>
         <tr>
@@ -6903,7 +6935,7 @@ components:
       required: True
       schema:
         type: string
-        format: wazuh_path
+        format: wpk_path
     installer:
       in: query
       name: installer
@@ -6985,7 +7017,6 @@ components:
         type: string
         format: xml_filename_path
 
-
 tags:
   - name: API Info
     description: "Wazuh API information"
@@ -7029,6 +7060,8 @@ tags:
     description: "Tasks information"
   - name: Vulnerability
     description: "Vulnerabilities information"
+  - name: Events
+    description: "Ingestion endpoints"
 
 security:
   - jwt: []
@@ -7058,7 +7091,7 @@ paths:
                 api_version: "v4.5.0"
                 revision: '40100'
                 license_name: "GPL 2.0"
-                license_url: "https://github.com/wazuh/wazuh/blob/v4.5.0/LICENSE"
+                license_url: "https://github.com/wazuh/wazuh/blob/v4.8.0/LICENSE"
                 hostname: "wazuh"
                 timestamp: "2019-04-02T08:08:11Z"
 
@@ -7204,6 +7237,7 @@ paths:
         - $ref: '#/components/parameters/ip'
         - $ref: '#/components/parameters/registerIP'
         - $ref: '#/components/parameters/group_config_status'
+        - $ref: '#/components/parameters/distinct'
       responses:
         '200':
           description: "List of agents or error description"
@@ -7784,6 +7818,7 @@ paths:
                                       macos: 0
                                       others: 0
                                     office365: 0
+                                    ms-graph: 0
                                     oscap: 0
                                     osquery: 0
                                     rootcheck: 1
@@ -8306,6 +8341,9 @@ paths:
         - $ref: '#/components/parameters/sort'
         - $ref: '#/components/parameters/search'
         - $ref: '#/components/parameters/hash'
+        - $ref: '#/components/parameters/query'
+        - $ref: '#/components/parameters/select'
+        - $ref: '#/components/parameters/distinct'
       responses:
         '200':
           description: "List all groups"
@@ -8416,6 +8454,7 @@ paths:
         - $ref: '#/components/parameters/search'
         - $ref: '#/components/parameters/statusAgentParam'
         - $ref: '#/components/parameters/query'
+        - $ref: '#/components/parameters/distinct'
       responses:
         '200':
           description: "List of agents or error description"
@@ -8659,6 +8698,9 @@ paths:
         - $ref: '#/components/parameters/sort'
         - $ref: '#/components/parameters/search'
         - $ref: '#/components/parameters/hash'
+        - $ref: '#/components/parameters/query'
+        - $ref: '#/components/parameters/select'
+        - $ref: '#/components/parameters/distinct'
       responses:
         '200':
           description: "Get group files"
@@ -9208,8 +9250,8 @@ paths:
                           code: 1707
                           message: "Cannot send request, agent is not active"
                           remediation: "Please, check non-active agents connection and try again.
-                           Visit https://documentation.wazuh.com/4.4/user-manual/registering/index.html
-                           and https://documentation.wazuh.com/4.4/user-manual/agents/agent-connection.html
+                           Visit https://documentation.wazuh.com/4.8/user-manual/registering/index.html
+                           and https://documentation.wazuh.com/4.8/user-manual/agents/agent-connection.html
                            to obtain more information on registering and connecting agents"
                         id:
                           - '009'
@@ -9518,6 +9560,7 @@ paths:
         - $ref: '#/components/parameters/node_type'
         - $ref: '#/components/parameters/nodes_list'
         - $ref: '#/components/parameters/query'
+        - $ref: '#/components/parameters/distinct'
       responses:
         '200':
           description: "List of connected nodes"
@@ -10249,7 +10292,6 @@ paths:
                         provider:
                           name: nvd
                           enabled: yes
-                          update_from_year: 2010
                           update_interval: "1h"
                       syscheck:
                         disabled: no
@@ -11057,6 +11099,8 @@ paths:
         - $ref: '#/components/parameters/tag'
         - $ref: '#/components/parameters/log_level'
         - $ref: '#/components/parameters/query'
+        - $ref: '#/components/parameters/select'
+        - $ref: '#/components/parameters/distinct'
       responses:
         '200':
           description: "Wazuh node logs"
@@ -11329,6 +11373,8 @@ paths:
         - $ref: '#/components/parameters/search'
         - $ref: '#/components/parameters/get_dirnames_path'
         - $ref: '#/components/parameters/filename'
+        - $ref: '#/components/parameters/query'
+        - $ref: '#/components/parameters/distinct'
       responses:
         '200':
           description: "Successfully got all CDB lists and the files where they are defined"
@@ -11825,6 +11871,7 @@ paths:
         - $ref: '#/components/parameters/raw'
         - $ref: '#/components/parameters/section'
         - $ref: '#/components/parameters/field'
+        - $ref: '#/components/parameters/distinct'
       responses:
         '200':
           description: "Wazuh configuration"
@@ -11983,6 +12030,8 @@ paths:
                               syscheck_queries: 2
                               fim_file_queries: 2
                               fim_registry_queries: 0
+                              fim_registry_key_queries: 0
+                              fim_registry_value_queries: 0
                             rootcheck_queries:
                               rootcheck_queries: 2
                             sca_queries:
@@ -12084,6 +12133,8 @@ paths:
                               syscheck_time: 49
                               fim_file_time: 30
                               fim_registry_time: 0
+                              fim_registry_key_time: 0
+                              fim_registry_value_time: 0
                             rootcheck_time:
                               rootcheck_time: 47
                             sca_time:
@@ -12693,6 +12744,8 @@ paths:
         - $ref: '#/components/parameters/tag'
         - $ref: '#/components/parameters/log_level'
         - $ref: '#/components/parameters/query'
+        - $ref: '#/components/parameters/select'
+        - $ref: '#/components/parameters/distinct'
       responses:
         '200':
           description: "Wazuh logs"
@@ -13028,6 +13081,7 @@ paths:
         - $ref: '#/components/parameters/search'
         - $ref: '#/components/parameters/select'
         - $ref: '#/components/parameters/query'
+        - $ref: '#/components/parameters/distinct'
       responses:
         '200':
           description: "Get MITRE groups information"
@@ -13172,6 +13226,7 @@ paths:
         - $ref: '#/components/parameters/search'
         - $ref: '#/components/parameters/select'
         - $ref: '#/components/parameters/query'
+        - $ref: '#/components/parameters/distinct'
       responses:
         '200':
           description: "Get MITRE mitigations information"
@@ -13290,6 +13345,7 @@ paths:
         - $ref: '#/components/parameters/search'
         - $ref: '#/components/parameters/select'
         - $ref: '#/components/parameters/query'
+        - $ref: '#/components/parameters/distinct'
       responses:
         '200':
           description: "Get MITRE software information"
@@ -13361,6 +13417,7 @@ paths:
         - $ref: '#/components/parameters/search'
         - $ref: '#/components/parameters/select'
         - $ref: '#/components/parameters/query'
+        - $ref: '#/components/parameters/distinct'
       responses:
         '200':
           description: "Get MITRE tactics information"
@@ -13445,6 +13502,7 @@ paths:
         - $ref: '#/components/parameters/search'
         - $ref: '#/components/parameters/select'
         - $ref: '#/components/parameters/query'
+        - $ref: '#/components/parameters/distinct'
       responses:
         '200':
           description: "Get MITRE techniques information"
@@ -13742,6 +13800,7 @@ paths:
         - $ref: '#/components/parameters/nist-800-53'
         - $ref: '#/components/parameters/tsc'
         - $ref: '#/components/parameters/mitre'
+        - $ref: '#/components/parameters/distinct'
       responses:
         '200':
           description: "Rule"
@@ -13929,6 +13988,9 @@ paths:
         - $ref: '#/components/parameters/get_dirnames_path'
         - $ref: '#/components/parameters/xml_filename'
         - $ref: '#/components/parameters/statusRLDParam'
+        - $ref: '#/components/parameters/query'
+        - $ref: '#/components/parameters/select'
+        - $ref: '#/components/parameters/distinct'
       responses:
         '200':
           description: "Rule"
@@ -13986,6 +14048,7 @@ paths:
         - $ref: '#/components/parameters/wait_for_complete'
         - $ref: '#/components/parameters/xml_filename_path'
         - $ref: '#/components/parameters/raw'
+        - $ref: '#/components/parameters/get_dirnames_path'
       responses:
         '200':
           description: "Rule content"
@@ -14135,6 +14198,7 @@ paths:
         - $ref: '#/components/parameters/wait_for_complete'
         - $ref: '#/components/parameters/xml_filename_path'
         - $ref: '#/components/parameters/overwrite'
+        - $ref: '#/components/parameters/get_dirnames_path'
       requestBody:
         description: "Content of the rule to be uploaded"
         required: true
@@ -14190,6 +14254,7 @@ paths:
         - $ref: '#/components/parameters/pretty'
         - $ref: '#/components/parameters/wait_for_complete'
         - $ref: '#/components/parameters/xml_filename_path'
+        - $ref: '#/components/parameters/get_dirnames_path'
       responses:
         '200':
           description: "Confirmation message"
@@ -14635,6 +14700,7 @@ paths:
         - $ref: '#/components/parameters/filename'
         - $ref: '#/components/parameters/get_dirnames_path'
         - $ref: '#/components/parameters/statusRLDParam'
+        - $ref: '#/components/parameters/distinct'
       responses:
         '200':
           description: "List of decoders included in ossec.conf"
@@ -14708,6 +14774,9 @@ paths:
         - $ref: '#/components/parameters/xml_filename'
         - $ref: '#/components/parameters/get_dirnames_path'
         - $ref: '#/components/parameters/statusRLDParam'
+        - $ref: '#/components/parameters/query'
+        - $ref: '#/components/parameters/select'
+        - $ref: '#/components/parameters/distinct'
       responses:
         '200':
           description: "List of decoders files"
@@ -14762,6 +14831,7 @@ paths:
         - $ref: '#/components/parameters/wait_for_complete'
         - $ref: '#/components/parameters/xml_filename_path'
         - $ref: '#/components/parameters/raw'
+        - $ref: '#/components/parameters/get_dirnames_path'
       responses:
         '200':
           description: "Decoder content"
@@ -14907,6 +14977,7 @@ paths:
         - $ref: '#/components/parameters/wait_for_complete'
         - $ref: '#/components/parameters/xml_filename_path'
         - $ref: '#/components/parameters/overwrite'
+        - $ref: '#/components/parameters/get_dirnames_path'
       requestBody:
         description: "Content of the decoder to be uploaded"
         required: true
@@ -14962,6 +15033,7 @@ paths:
         - $ref: '#/components/parameters/pretty'
         - $ref: '#/components/parameters/wait_for_complete'
         - $ref: '#/components/parameters/xml_filename_path'
+        - $ref: '#/components/parameters/get_dirnames_path'
       responses:
         '200':
           description: "Confirmation message"
@@ -16193,6 +16265,7 @@ paths:
         - $ref: '#/components/parameters/select'
         - $ref: '#/components/parameters/hotfix'
         - $ref: '#/components/parameters/query'
+        - $ref: '#/components/parameters/distinct'
       responses:
         '200':
           description: "Return an agent's hotfix results"
@@ -16253,6 +16326,7 @@ paths:
         - $ref: '#/components/parameters/broadcast'
         - $ref: '#/components/parameters/netmask'
         - $ref: '#/components/parameters/query'
+        - $ref: '#/components/parameters/distinct'
       responses:
         '200':
           description: "Return a list of agent's network results"
@@ -16323,6 +16397,7 @@ paths:
         - $ref: '#/components/parameters/tx.dropped'
         - $ref: '#/components/parameters/rx.dropped'
         - $ref: '#/components/parameters/query'
+        - $ref: '#/components/parameters/distinct'
       responses:
         '200':
           description: "Return a list of agent's network interfaces results"
@@ -16396,6 +16471,7 @@ paths:
         - $ref: '#/components/parameters/gateway'
         - $ref: '#/components/parameters/dhcp'
         - $ref: '#/components/parameters/query'
+        - $ref: '#/components/parameters/distinct'
       responses:
         '200':
           description: "Return a list of agent's network protocol results"
@@ -16521,6 +16597,7 @@ paths:
         - $ref: '#/components/parameters/file_format'
         - $ref: '#/components/parameters/package_version'
         - $ref: '#/components/parameters/query'
+        - $ref: '#/components/parameters/distinct'
       responses:
         '200':
           description: "Return a list of agent's packages results"
@@ -16624,6 +16701,7 @@ paths:
         - $ref: '#/components/parameters/state'
         - $ref: '#/components/parameters/process'
         - $ref: '#/components/parameters/query'
+        - $ref: '#/components/parameters/distinct'
       responses:
         '200':
           description: "Return a list of agent's packages results"
@@ -16734,6 +16812,7 @@ paths:
         - $ref: '#/components/parameters/sgroup'
         - $ref: '#/components/parameters/suser'
         - $ref: '#/components/parameters/query'
+        - $ref: '#/components/parameters/distinct'
       responses:
         '200':
           description: "Return a list of agent's processes results"
@@ -17280,6 +17359,8 @@ paths:
         - $ref: '#/components/parameters/select'
         - $ref: '#/components/parameters/sort'
         - $ref: '#/components/parameters/wait_for_complete'
+        - $ref: '#/components/parameters/query'
+        - $ref: '#/components/parameters/distinct'
       responses:
         '200':
           description: "Information about user"
@@ -17545,6 +17626,8 @@ paths:
         - $ref: '#/components/parameters/select'
         - $ref: '#/components/parameters/sort'
         - $ref: '#/components/parameters/wait_for_complete'
+        - $ref: '#/components/parameters/query'
+        - $ref: '#/components/parameters/distinct'
       responses:
         '200':
           description: "Return a list of roles"
@@ -17821,6 +17904,8 @@ paths:
         - $ref: '#/components/parameters/select'
         - $ref: '#/components/parameters/sort'
         - $ref: '#/components/parameters/wait_for_complete'
+        - $ref: '#/components/parameters/query'
+        - $ref: '#/components/parameters/distinct'
       responses:
         '200':
           description: "Return a list of security rules"
@@ -18059,6 +18144,8 @@ paths:
         - $ref: '#/components/parameters/select'
         - $ref: '#/components/parameters/sort'
         - $ref: '#/components/parameters/wait_for_complete'
+        - $ref: '#/components/parameters/query'
+        - $ref: '#/components/parameters/distinct'
       responses:
         '200':
           description: "Return a list of policies"
@@ -19056,6 +19143,70 @@ paths:
         '429':
           $ref: '#/components/responses/TooManyRequestsResponse'
 
+  /events:
+    post:
+      tags:
+      - Events
+      summary: "Ingest events"
+      description: |-
+        Send security events to analysisd.
+
+        The endpoint is limited to receiving a max of 30 requests per minute and a max bulk size of 100 events per request.
+      operationId: api.controllers.event_controller.forward_event
+      x-rbac-actions:
+        - $ref: '#/x-rbac-catalog/actions/event:ingest'
+      parameters:
+        - $ref: '#/components/parameters/pretty'
+        - $ref: '#/components/parameters/wait_for_complete'
+      requestBody:
+        content:
+          application/json:
+              schema:
+                type: object
+                properties:
+                  events:
+                    description: "Bulk of events"
+                    type: array
+                    items:
+                      type: string
+                required:
+                - events
+              example:
+                events:
+                  - "Event value 1"
+                  - "{\"someKey\": \"Event value 2\"}"
+      responses:
+        '200':
+          description: "Events accepted"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+              example:
+                data:
+                  affected_items:
+                    - "Event value 1"
+                    - "{\"someKey\": \"Event value 2\"}"
+                  total_affected_items: 2
+                  total_failed_items: 0
+                  failed_items: []
+                message: "All events were forwarded to analisysd"
+                error: 0
+        '400':
+          $ref: '#/components/responses/ResponseError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedResponse'
+        '403':
+          $ref: '#/components/responses/PermissionDeniedResponse'
+        '405':
+          $ref: '#/components/responses/InvalidHTTPMethodResponse'
+        '406':
+          $ref: '#/components/responses/WrongContentTypeResponse'
+        '413':
+          $ref: '#/components/responses/RequestTooLargeResponse'
+        '429':
+          $ref: '#/components/responses/TooManyRequestsResponse'
+
 externalDocs:
   description: "Find more about Wazuh API usage"
-  url: 'https://documentation.wazuh.com/4.4/user-manual/api/index.html'
+  url: 'https://documentation.wazuh.com/4.8/user-manual/api/index.html'

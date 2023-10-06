@@ -11,6 +11,7 @@ from os.path import dirname
 from signal import signal, SIGINT
 from sys import exit, path, argv
 from time import sleep
+from connexion import ProblemException
 
 # Set framework path
 path.append(dirname(argv[0]) + '/../framework')  # It is necessary to import Wazuh package
@@ -52,7 +53,7 @@ def get_script_arguments() -> argparse.Namespace:
         common.WPK_REPO_URL_4_X))
     parser.add_argument("-v", "--version", type=str, help="Version to upgrade. [Default: latest Wazuh version]")
     parser.add_argument("-F", "--force", action="store_true",
-                        help="Allows reinstall same version and downgrade version.")
+                        help="Forces the agents to upgrade, ignoring version validations.")
     parser.add_argument("-s", "--silent", action="store_true", help="Do not show output.")
     parser.add_argument("-l", "--list_outdated", action="store_true", help="Generates a list with all outdated agents.")
     parser.add_argument("-f", "--file", type=str, help="Custom WPK filename.")
@@ -118,7 +119,7 @@ async def get_agent_version(agent_id: str) -> str:
         "limit": 1
     }
     result = await cluster_utils.forward_function(get_agents, f_kwargs=f_kwargs)
-    return result['version']
+    return result.affected_items[0]['version']
 
 
 def create_command() -> dict:
@@ -223,6 +224,10 @@ async def main():
 
     except WazuhError as wazuh_err:
         print(f"Error {wazuh_err.code}: {wazuh_err.message}")
+        if args.debug:
+            raise
+    except ProblemException as e:
+        print(f"Error {getattr(e, 'ext', {}).get('code', e.status)}: {str(e.detail)}")
         if args.debug:
             raise
     except Exception as unexpected_err:

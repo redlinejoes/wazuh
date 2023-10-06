@@ -6,6 +6,7 @@ import json
 import logging
 import sys
 from unittest.mock import patch, MagicMock, AsyncMock, call, ANY
+import datetime
 
 import pytest
 import uvloop
@@ -377,7 +378,8 @@ def test_worker_handler_process_request_ok(logger_mock):
             assert worker_handler.process_request(
                 command=b"syn_m_a_e", data=b'{"updated_chunks": 4, "error_messages": []}') == b"ok"
             sync_mock.assert_called_once_with(setup_task_logger_mock,
-                                              0.0, b'{"updated_chunks": 4, "error_messages": []}'.decode())
+                                              datetime.datetime(1970, 1, 1, 0, 0),
+                                              b'{"updated_chunks": 4, "error_messages": []}'.decode())
             logger_mock.assert_called_with("Command received: 'b'syn_m_a_e''")
     # Test the seventh condition
     with patch("wazuh.core.cluster.worker.c_common.error_receiving_agent_information",
@@ -428,6 +430,38 @@ def test_worker_handler_process_request_ok(logger_mock):
         process_request_mock.assert_called_once_with(b"random", b"data")
 
 
+@patch.object(logging.getLogger("wazuh"), "info")
+@patch("wazuh.core.cluster.worker.client.AbstractClient.connection_lost")
+@patch("wazuh.core.cluster.worker.cluster.clean_up") 
+def test_worker_handler_connection_lost(clean_up_mock, connection_lost_mock, logger_mock):
+    """Check if all the pending tasks are closed when the connection between workers and master is lost."""
+
+    worker_handler = get_worker_handler()  
+    worker_handler.logger = logging.getLogger("wazuh")
+
+    class PendingTaskMock:
+        """Auxiliary class."""
+
+        def __init__(self):
+            self.task = TaskMock()
+
+    class TaskMock:
+        """Auxiliary class."""
+
+        def __init__(self):
+            pass
+
+        def cancel(self):
+            """Auxiliary method."""
+            pass
+
+    worker_handler.sync_tasks = {"key": PendingTaskMock()}
+    worker_handler.connection_lost(Exception())
+
+    connection_lost_mock.assert_called_once()
+    clean_up_mock.assert_called_once_with(node_name=worker_handler.name)
+
+    
 @patch.object(logging.getLogger("wazuh"), "debug")
 @patch("asyncio.create_task", side_effect=exception.WazuhClusterError(1001))
 def test_worker_handler_process_request_ko(create_task_mock, logger_mock):

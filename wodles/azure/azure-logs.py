@@ -35,7 +35,7 @@ from requests import get, post, HTTPError, RequestException
 import orm
 
 sys.path.insert(0, dirname(dirname(abspath(__file__))))
-from utils import ANALYSISD
+from utils import ANALYSISD, MAX_EVENT_SIZE
 
 
 # URLs
@@ -49,7 +49,7 @@ DATETIME_MASK = '%Y-%m-%dT%H:%M:%S.%fZ'
 
 # Logger parameters
 LOGGING_MSG_FORMAT = '%(asctime)s azure: %(levelname)s: %(message)s'
-LOGGING_DATE_FORMAT = '%Y/%m/%d %I:%M:%S'
+LOGGING_DATE_FORMAT = '%Y/%m/%d %H:%M:%S'
 LOG_LEVELS = {0: logging.WARNING,
               1: logging.INFO,
               2: logging.DEBUG}
@@ -707,13 +707,15 @@ def get_blobs(
         for blob in blobs:
             # Skip if the blob is empty
             if blob.properties.content_length == 0:
+                logging.debug(f"Empty blob {blob.name}, skipping")
                 continue
-
-            # Skip the blob if nested under prefix but prefix is not setted
-            if prefix is None and len(blob.name.split("/")) > 1:
+            # Skip the blob if nested under the set prefix
+            if prefix is not None and len(blob.name.split("/")) > 2:
+                logging.debug(f"Skipped blob {blob.name}, nested under set prefix {prefix}")
                 continue
             # Skip the blob if its name has not the expected format
             if args.blobs and args.blobs not in blob.name:
+                logging.debug(f"Skipped blob, name {blob.name} does not match with the format '{args.blobs}'")
                 continue
 
             # Skip the blob if already processed
@@ -829,9 +831,16 @@ def send_message(message: str):
         The message body to send to analysisd.
     """
     s = socket(AF_UNIX, SOCK_DGRAM)
+
+    encoded_msg = f'{SOCKET_HEADER}{message}'.encode(errors='replace')
+
+    # Logs warning if event is bigger than max size
+    if len(encoded_msg) > MAX_EVENT_SIZE:
+        logging.warning(f"WARNING: Event size exceeds the maximum allowed limit of {MAX_EVENT_SIZE} bytes.")
+
     try:
         s.connect(ANALYSISD)
-        s.send(f'{SOCKET_HEADER}{message}'.encode(errors='replace'))
+        s.send(encoded_msg)
     except socket_error as e:
         if e.errno == 111:
             logging.error("ERROR: Wazuh must be running.")

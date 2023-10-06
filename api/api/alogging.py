@@ -30,14 +30,7 @@ class AccessLogger(AbstractAccessLogger):
     """
     Define the log writer used by aiohttp.
     """
-    def check_stream(self):
-        """Renew logger handler stream if it has been closed."""
-        for handler in self.logger.handlers:
-            if not handler.stream or handler.stream.closed:
-                handler.stream = handler._open()
-
-    def custom_logging(self, user: str, remote: str, method: str, path: str, query: dict, body: dict, time: float,
-                       status: int, hash_auth_context: str = ''):
+    def custom_logging(self, user, remote, method, path, query, body, time, status, hash_auth_context=''):
         """Provide the log entry structure depending on the logging format.
 
         Parameters
@@ -61,29 +54,30 @@ class AccessLogger(AbstractAccessLogger):
         hash_auth_context : str, optional
             Hash representing the authorization context. Default: ''
         """
+        json_info = {
+            'user': user,
+            'ip': remote,
+            'http_method': method,
+            'uri': f'{method} {path}',
+            'parameters': query,
+            'body': body,
+            'time': f'{time:.3f}s',
+            'status_code': status
+        }
+
         if not hash_auth_context:
-            log_info = f'{user} {remote} "{method} {path}" with parameters {json.dumps(query)} ' \
-                       f'and body {json.dumps(body)} done in {time:.3f}s: {status}'
-            json_info = {'user': user,
-                         'ip': remote,
-                         'http_method': method,
-                         'uri': f'{method} {path}',
-                         'parameters': query,
-                         'body': body,
-                         'time': f'{time:.3f}s',
-                         'status_code': status}
+            log_info = f'{user} {remote} "{method} {path}" '
         else:
-            log_info = f'{user} ({hash_auth_context}) {remote} "{method} {path}" with parameters {json.dumps(query)} ' \
-                       f'and body {json.dumps(body)} done in {time:.3f}s: {status}'
-            json_info = {'user': user,
-                         'hash_auth_context': hash_auth_context,
-                         'ip': remote,
-                         'http_method': method,
-                         'uri': f'{method} {path}',
-                         'parameters': query,
-                         'body': body,
-                         'time': f'{time:.3f}s',
-                         'status_code': status}
+            log_info = f'{user} ({hash_auth_context}) {remote} "{method} {path}" '
+            json_info['hash_auth_context'] = hash_auth_context
+
+        if path == '/events' and self.logger.level >= 20:
+            # If log level is info simplify the messages for the /events requests.
+            events = body.get('events', [])
+            body = {'events': len(events)}
+            json_info['body'] = body
+
+        log_info += f'with parameters {json.dumps(query)} and body {json.dumps(body)} done in {time:.3f}s: {status}'
 
         self.logger.info(log_info, extra={'log_type': 'log'})
         self.logger.info(json_info, extra={'log_type': 'json'})
@@ -100,7 +94,6 @@ class AccessLogger(AbstractAccessLogger):
         time : float
             Time taken by the API to respond to the request.
         """
-        self.check_stream()
         query = dict(request.query)
         body = request.get("body", dict())
         if 'password' in query:
@@ -143,13 +136,14 @@ class APILogger(WazuhLogger):
         super().__init__(*args, **kwargs,
                          custom_formatter=WazuhJsonFormatter if log_path.endswith('json') else None)
 
-    def setup_logger(self):
-        """Set up API logger.
-
-        In addition to super().setup_logger(), this method sets up the log level based on the log level defined in the
-        API configuration file.
+    def setup_logger(self, custom_handler: logging.Handler = None):
         """
-        super().setup_logger()
+        Set ups API logger. In addition to super().setup_logger() this method adds:
+            * Sets up log level based on the log level defined in API configuration file.
+
+        :param custom_handler: custom handler that can be set instead of the default one from the WazuhLogger class.
+        """
+        super().setup_logger(handler=custom_handler)
 
         if self.debug_level == 'debug2':
             debug_level = logging.DEBUG2
