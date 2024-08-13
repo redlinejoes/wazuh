@@ -44,7 +44,21 @@ namespace PackageLinuxHelper
             }
         }
 
-        if (!info.empty() && info.at("Status") == "install ok installed")
+        /*
+           According to dpkg documentation, the status of the package consists in three fields separated by spaces:
+           'SELECTION_STATE FLAG PACKAGE_STATE'.
+
+           SELECTION_STATE: the desired action to take by the package manager. It could be 'install', 'hold',
+                            'deinstall', 'purge', or 'unknown'.
+           FLAG: indicates if the package requires a reinstall or if no issues were found. It could be 'ok',
+                 or 'reinstreq'.
+           PACKAGE_STATE: this is the real status of package at this moment. It could be 'not-installed',
+                          'config-files', 'half-installed', 'unpacked', 'half-configured', 'triggers-awaited',
+                          'triggers-pending', or 'installed'.
+
+           We'll collect packages in any selection state, with 'ok' FLAG and 'installed' PACKAGE_STATE.
+         */
+        if (!info.empty() && info.at("Status").find("ok installed") != std::string::npos)
         {
             ret["name"] = info.at("Package");
 
@@ -77,7 +91,7 @@ namespace PackageLinuxHelper
 
             if (it != info.end())
             {
-                size = stol(it->second);
+                size = stol(it->second) * 1024;
             }
 
             it = info.find("Multi-Arch");
@@ -214,7 +228,7 @@ namespace PackageLinuxHelper
             }
             else if (data.is_string())
             {
-                auto stringData = data.get_ref<const std::string&>();
+                const auto& stringData = data.get_ref<const std::string&>();
 
                 if (stringData.length())
                 {
